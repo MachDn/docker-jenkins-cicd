@@ -1,35 +1,20 @@
-pipeline { 
-    environment { 
-        repository = "moveho/jdocker-jenkins-cicd"  //docker hub id와 repository 이름
-        DOCKERHUB_CREDENTIALS = credentials('docker-credentials') // jenkins에 등록해 놓은 docker hub credentials 이름
-        dockerImage = '' 
-  }
-  agent any 
-  stages { 
-      stage('Building our image') { 
-          steps { 
-              script { 
-                  sh "cp /var/lib/jenkins/workspace/sue_jenkins_project/build/libs/sue-member-0.0.1-SNAPSHOT.war /var/lib/jenkins/workspace/pipeline/" // war 파일을 현재 위치로 복사 
-                  dockerImage = docker.build repository + ":$BUILD_NUMBER" 
-              }
-          } 
-      }
-      stage('Login'){
-          steps{
-              sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin' // docker hub 로그인
-          }
-      }
-      stage('Deploy our image') { 
-          steps { 
-              script {
-                sh 'docker push $repository:$BUILD_NUMBER' //docker push
-              } 
-          }
-      } 
-      stage('Cleaning up') { 
-		  steps { 
-              sh "docker rmi $repository:$BUILD_NUMBER" // docker image 제거
-          }
-      } 
-  }
+pipeline {
+    agent {
+        docker {
+            image 'moveho/docker-jenkins-cicd'
+            args '-u root'
+        }
     }
+    stages {
+        stage('Build and Push Image') {
+            steps {
+                sh 'docker build -t moveho/docker-jenkins-cicd:latest .'
+                withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                    sh 'docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD'
+                }
+                sh 'docker tag moveho/docker-jenkins-cicd'
+                sh 'docker push moveho/docker-jenkins-cicd'
+            }
+        }
+    }
+}
