@@ -1,53 +1,46 @@
-def component = [
-		Preprocess: false,
-		Hyper: false,
-		Train: false,
-		Test: false,
-		Bento: false
-]
 pipeline {
-	agent any
-	stages {
-		stage("Checkout") {
-			steps {
-				checkout scm
-			}
-		}
-		stage("Build") {
-			steps {
-                script {
-					component.each{ entry ->
-						stage ("${entry.key} Build"){
-							if(entry.value){
-								var = entry.key
-								sh "docker-compose build ${var.toLowerCase()}"
-							}	
-						}
-					}
-				}
-			}
-		}
-		stage("Tag and Push") {
-			steps {
-                script {
-					component.each{ entry ->
-						stage ("${entry.key} Push"){
-							if(entry.value){
-								var = entry.key
-								withCredentials([[$class: 'UsernamePasswordMultiBinding',
-								credentialsId: 'docker-credentials',
-								usernameVariable: 'DOCKER_USER_ID',
-								passwordVariable: 'DOCKER_USER_PASSWORD'
-								]]){
-								sh "docker tag spaceship_pipeline_${var.toLowerCase()}:latest ${DOCKER_USER_ID}/spaceship_pipeline_${var.toLowerCase()}:${BUILD_NUMBER}"
-								sh "docker login -u ${DOCKER_USER_ID} -p ${DOCKER_USER_PASSWORD}"
-								sh "docker push ${DOCKER_USER_ID}/spaceship_pipeline_${var.toLowerCase()}:${BUILD_NUMBER}"
-								}
-							}
-						}
-					}
-				}
-			}	
-		}
-	}
+    agent any
+
+    environment {
+        DOCKER_ID = credentials('docker-credentials')
+        DOCKER_PASSWORD = credentials('docker-credentials')
+    }
+
+    stages {
+        stage('Init') {
+            steps {
+                echo 'Initializing..'
+                echo "Running ${env.BUILD_ID} on ${env.JENKINS_URL}"
+                echo "Current branch: ${env.BRANCH_NAME}"
+                sh 'echo $DOCKER_PASSWORD | docker login -u $DOCKER_ID --password-stdin'
+            }
+        }
+        stage('Build') {
+            steps {
+                echo 'Building image..'
+                sh 'docker build -t $DOCKER_ID/docker-jenkins-cicd:latest .'
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'Testing..'
+                sh 'docker run --rm -e CI=true $DOCKER_ID/docker-jenkins-cicd'
+            }
+        }
+        stage('Publish') {
+            steps {
+                echo 'Publishing image to DockerHub..'
+                sh 'docker push $DOCKER_ID/docker-jenkins-cicd:latest'
+            }
+        }
+        stage('Cleanup') {
+            steps {
+                echo 'Removing unused docker containers and images..'
+                sh 'docker ps -aq | xargs --no-run-if-empty docker rm'
+                // keep intermediate images as cache, only delete the final image
+                sh 'docker images -q | xargs --no-run-if-empty docker rmi'
+            }
+        }
+    }
 }
+
