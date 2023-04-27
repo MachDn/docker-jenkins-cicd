@@ -1,46 +1,53 @@
+def component = [
+		Preprocess: false,
+		Hyper: false,
+		Train: false,
+		Test: false,
+		Bento: false
+]
 pipeline {
-
-    agent any
-    
-    environment {
-        imagename = "moveho/docker-jenkins-cicd"
-        registryCredential = 'docker-credentials'
-        dockerImage = ''
-    }
-    
-    stages {
-        stage('git clone') {
-            steps {
-                dir('/home/kevin/cicd') {
-                    checkout scmGit(branches: [[name: '*/master']], extensions: [submodule(parentCredentials: true, reference: '', trackingSubmodules: true)], userRemoteConfigs: [[credentialsId: 'MachDnr', url: 'https://github.com/MachDn/docker-jenkins-cicd.git']])
-                }
-            }
-        }
-            
-         stage('docker-build'){
-            steps {
-                echo 'Build Docker'
-                dir('/home/kevin/cicd'){
-                    script {
-                        sh "pwd"
-                        dockerImage = docker.build imagename
-                        
-                    }
-                }
-            }
-        }
-        
-        stage('docker-push'){
-            steps{
-                echo 'Push Docker'
+	agent any
+	stages {
+		stage("Checkout") {
+			steps {
+				checkout scm
+			}
+		}
+		stage("Build") {
+			steps {
                 script {
-                    docker.withRegistry('', registryCredential){
-                        dockerImage.push("1.0")
-                    }
-                }
-                
-            }
-        }
-        
-    }
+					component.each{ entry ->
+						stage ("${entry.key} Build"){
+							if(entry.value){
+								var = entry.key
+								sh "docker-compose build ${var.toLowerCase()}"
+							}	
+						}
+					}
+				}
+			}
+		}
+		stage("Tag and Push") {
+			steps {
+                script {
+					component.each{ entry ->
+						stage ("${entry.key} Push"){
+							if(entry.value){
+								var = entry.key
+								withCredentials([[$class: 'UsernamePasswordMultiBinding',
+								credentialsId: 'docker-credentials',
+								usernameVariable: 'DOCKER_USER_ID',
+								passwordVariable: 'DOCKER_USER_PASSWORD'
+								]]){
+								sh "docker tag spaceship_pipeline_${var.toLowerCase()}:latest ${DOCKER_USER_ID}/spaceship_pipeline_${var.toLowerCase()}:${BUILD_NUMBER}"
+								sh "docker login -u ${DOCKER_USER_ID} -p ${DOCKER_USER_PASSWORD}"
+								sh "docker push ${DOCKER_USER_ID}/spaceship_pipeline_${var.toLowerCase()}:${BUILD_NUMBER}"
+								}
+							}
+						}
+					}
+				}
+			}	
+		}
+	}
 }
