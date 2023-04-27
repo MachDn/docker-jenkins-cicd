@@ -1,15 +1,46 @@
-node {   
-    stage('Clone repository') {
-        git credentialsId: 'git', url: https://github.com/MachDn/docker-jenkins-cicd.git'
+pipeline {
+
+    agent any
+    
+    environment {
+        imagename = "moveho/docker-jenkins-cicd"
+        registryCredential = 'docker-credentials'
+        dockerImage = ''
     }
     
-    stage('Build image') {
-       dockerImage = docker.build("moveho/docker-jenkins-cicd:latest")
-    }
-    
- stage('Push image') {
-        withDockerRegistry([ credentialsId: "docker-credentials", url: "" ]) {
-        dockerImage.push()
+    stages {
+        stage('git clone') {
+            steps {
+                dir('/home/kevin/cicd') {
+                    checkout scmGit(branches: [[name: '*/master']], extensions: [submodule(parentCredentials: true, reference: '', trackingSubmodules: true)], userRemoteConfigs: [[credentialsId: 'MachDnr', url: 'https://github.com/MachDn/docker-jenkins-cicd.git']])
+                }
+            }
         }
-    }    
+            
+         stage('docker-build'){
+            steps {
+                echo 'Build Docker'
+                dir('/home/kevin/cicd'){
+                    script {
+                        sh "pwd"
+                        dockerImage = docker.build imagename
+                        
+                    }
+                }
+            }
+        }
+        
+        stage('docker-push'){
+            steps{
+                echo 'Push Docker'
+                script {
+                    docker.withRegistry('', registryCredential){
+                        dockerImage.push("1.0")
+                    }
+                }
+                
+            }
+        }
+        
+    }
 }
