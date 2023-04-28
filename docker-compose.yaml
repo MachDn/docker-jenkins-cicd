@@ -1,6 +1,6 @@
 version: '3'
 services:
   app:
-    image: moveho/docker-jenkins-cicd
+    image: moveho/docker-jenkins-cicd:latest
     ports:
       - "8000:8000"
